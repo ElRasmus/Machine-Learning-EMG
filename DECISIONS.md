@@ -1,4 +1,4 @@
-**Desicions**
+**Decisions**
 
 **7 Features**
 - Choice: We plan to use the mean EMG envelope amplitude in each time window and express it as a percentage of the range between rest and maximum contraction measured during calibration.
