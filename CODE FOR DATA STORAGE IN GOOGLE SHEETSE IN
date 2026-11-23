@@ -1,0 +1,89 @@
+// ===========================================================================
+//  Recibe las muestras del ESP32 y las escribe en Google Sheets.
+//  Cada ensayo se guarda en una hoja nueva del mismo libro.
+//
+//  Como instalarlo:
+//   1. Abre el Google Sheets donde quieres los datos.
+//   2. Menu Extensiones > Apps Script.
+//   3. Borra lo que haya y pega todo este archivo.
+//   4. Guarda.
+//   5. Implementar > Nueva implementacion > tipo: Aplicacion web.
+//        Ejecutar como: Yo
+//        Quien tiene acceso: Cualquier usuario
+//   6. Copia la URL que termina en /exec y pegala en URL_SCRIPT del ESP32.
+//
+//  Si cambias este codigo, tienes que crear una implementacion nueva
+//  o actualizar la que ya existe, o el ESP32 va a seguir usando la version vieja.
+// ===========================================================================
+
+// Dejalo vacio si este script vive dentro del mismo Sheets (lo normal).
+// Si lo pusiste aparte, pon aqui el id del libro (lo que va entre /d/ y /edit en la URL).
+const ID_LIBRO = '';
+
+const TITULOS = ['n', 't_ms', 'mv', 'volts', 'label'];
+
+function doPost(e) {
+  const candado = LockService.getScriptLock();
+  try {
+    candado.waitLock(30000);
+  } catch (err) {
+    return texto('ERROR: el script esta ocupado');
+  }
+
+  try {
+    const nombreHoja = String(e.parameter.hoja || 'ensayo').substring(0, 95);
+    const fila       = parseInt(e.parameter.fila, 10);
+    const primero    = (e.parameter.primero === '1');
+    const fs         = e.parameter.fs || '';
+    const cuerpo     = (e.postData && e.postData.contents) ? e.postData.contents : '';
+
+    if (!fila || fila < 2) return texto('ERROR: falta el numero de fila');
+
+    const libro = ID_LIBRO ? SpreadsheetApp.openById(ID_LIBRO)
+                           : SpreadsheetApp.getActiveSpreadsheet();
+
+    let hoja = libro.getSheetByName(nombreHoja);
+
+    if (primero) {
+      if (hoja) libro.deleteSheet(hoja);          // si repites el ensayo, se rehace la hoja
+      hoja = libro.insertSheet(nombreHoja);
+      hoja.getRange(1, 1, 1, TITULOS.length).setValues([TITULOS]);
+      hoja.getRange(1, 1, 1, TITULOS.length).setFontWeight('bold');
+      hoja.setFrozenRows(1);
+      if (fs) hoja.getRange(1, TITULOS.length + 2).setValue('fs_hz: ' + fs);
+    }
+
+    if (!hoja) return texto('ERROR: no existe la hoja ' + nombreHoja);
+
+    const lineas = cuerpo.split('\n').filter(function (l) { return l.trim().length > 0; });
+    if (lineas.length === 0) return texto('OK 0');
+
+    const filas = lineas.map(function (l) {
+      const c = l.split(',');
+      return [Number(c[0]), Number(c[1]), Number(c[2]), Number(c[3]), String(c[4] || '').trim()];
+    });
+
+    // Google Sheets crea las hojas con pocos renglones: hay que agregar los que falten
+    const necesarios = fila + filas.length - 1;
+    const hay = hoja.getMaxRows();
+    if (hay < necesarios) hoja.insertRowsAfter(hay, necesarios - hay);
+
+    hoja.getRange(fila, 1, filas.length, TITULOS.length).setValues(filas);
+
+    return texto('OK ' + filas.length);
+
+  } catch (err) {
+    return texto('ERROR: ' + err.message);
+  } finally {
+    candado.releaseLock();
+  }
+}
+
+// Sirve para probar desde el navegador que la publicacion funciona
+function doGet(e) {
+  return texto('El script esta publicado y responde.');
+}
+
+function texto(s) {
+  return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.TEXT);
+}
