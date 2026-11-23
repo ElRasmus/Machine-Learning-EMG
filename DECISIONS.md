@@ -3,6 +3,7 @@
 **7 Features**
 - Choice: We plan to use the mean EMG envelope amplitude in each time window and express it as a percentage of the range between rest and maximum contraction measured during calibration.
 - Reason: In our three prototype tests, the resting envelope was 0.12–0.14 V, while the mean amplitude during contraction was 0.71–0.86 V. The maximum also varied between tests, which is why we want to use the calibrated range.
+- We don't know yet if the average amplitude is enough, or if a feature about frequency would add anything.
 
 **8 Model**
 - Choice — We chose Claude to help us compare two options for detecting muscle contractions: MyoTurtle’s current activation threshold and logistic regression, also we plan to train a logistic regression model in TinyML to predict rest or contraction from the average EMG envelope amplitude in each time window.
