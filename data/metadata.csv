@@ -1,0 +1,11 @@
+session,date,rest_s,warning_s,move_s,between_s,electrode_type,electrode_distance_cm,skin_preparation,sensor_model,gain,fs_hz,adc_bits,set
+1,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+2,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+3,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+4,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+5,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+6,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+7,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,train
+8,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,test
+9,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,test
+10,PENDING,4,PENDING,2,300,disposable Ag,not recorded,PENDING,MyoTurtle AD620,6800,PENDING,PENDING,test
