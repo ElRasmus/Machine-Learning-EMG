@@ -21,7 +21,7 @@ One session is one electrode placement. New electrodes are used in each session.
 4. Full-wave rectifier and linear envelope. The analog output is read by the ESP32 on GPIO 34.
    Source: McManus L, De Vito G, Lowery MM. Front Neurol 2020;11:576729.
 
-The ESP32 reads the analog envelope with its 12-bit ADC, averages 16 readings per sample and applies a smoothing of 0.8 times the previous value plus 0.2 times the new value. The loop period is 10 ms. The recorded signal is the envelope, not the raw EMG.
+The ESP32 reads the analog envelope on GPIO 34, averages 16 readings per sample and applies a smoothing of 0.8 times the previous value plus 0.2 times the new value. The loop period is 10 ms. The recorded signal is the envelope, not the raw EMG.
 
 ## Agreement
 
