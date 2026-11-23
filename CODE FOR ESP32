@@ -1,0 +1,181 @@
+// ===========================================================================
+//  Grabadora de EMG a 1000 muestras por segundo, por Bluetooth
+//
+//  Programa dedicado solo a tomar datos. No tiene LEDs, ni audio, ni WiFi,
+//  ni Firebase, ni juego: por eso puede sostener el ritmo de 1000 Hz.
+//  Manda las muestras por Bluetooth a la pagina pagina_datos_emg.html.
+//
+//  Entrada: pin 34 (la misma envolvente que lee la tortuga).
+//  Nombre con el que se anuncia: MyoDatos
+//
+//  Necesita la libreria NimBLE-Arduino de h2zero, version 2.x,
+//  la misma que ya usa el firmware de la tortuga.
+//
+//  Este archivo no tiene contrasenas de ningun tipo, asi que si lo quieres
+//  subir a GitHub no hay problema.
+// ===========================================================================
+
+#include <NimBLEDevice.h>
+
+// --------------------------------------------------------------- AJUSTES --
+
+constexpr uint8_t  PIN_EMG = 34;        // entrada analogica
+constexpr uint8_t  PIN_LED = 2;         // LED de la placa: prendido = pagina conectada
+
+constexpr uint32_t FS_HZ      = 1000;                  // muestras por segundo
+constexpr uint32_t PERIODO_US = 1000000UL / FS_HZ;
+
+constexpr uint16_t N_ANILLO   = 4096;   // muestras guardadas mientras esperan su envio
+constexpr uint32_t T_ENVIO_MS = 20;     // cada cuanto se vacia el anillo
+constexpr uint8_t  MAX_NOTIFY = 8;      // paquetes por vuelta, por si la pagina pide paquetes chicos
+
+#define NOMBRE_BLE      "MyoDatos"
+#define UUID_SERVICIO   "6e7a0001-5d1c-4b8e-9a3f-7c2b1d0e4a10"
+#define UUID_MUESTRAS   "6e7a0005-5d1c-4b8e-9a3f-7c2b1d0e4a10"
+
+// ------------------------------------------------------------- VARIABLES --
+
+NimBLECharacteristic *chMuestras = nullptr;
+bool     bleConectado = false;
+uint16_t mtuActual    = 23;             // lo negocia la pagina al conectarse
+
+static uint16_t anillo[N_ANILLO];               // muestras en milivolts
+static volatile uint32_t anilloEscribe = 0;     // total de muestras tomadas
+static volatile uint32_t anilloLee     = 0;     // total de muestras ya enviadas
+static volatile uint32_t perdidas      = 0;     // las que se tiraron por no alcanzar a enviarlas
+
+// -------------------------------------------------------------- MUESTREO --
+// Tarea aparte: lee el pin cada milisegundo y guarda el valor en el anillo.
+
+void tareaMuestreo(void *parametro) {
+  TickType_t ultimo = xTaskGetTickCount();
+  const TickType_t periodo = pdMS_TO_TICKS(1000 / FS_HZ);
+  for (;;) {
+    const uint16_t mv = (uint16_t)analogReadMilliVolts(PIN_EMG);
+    const uint32_t w = anilloEscribe;
+    anillo[w % N_ANILLO] = mv;
+    anilloEscribe = w + 1;
+    if (anilloEscribe - anilloLee > N_ANILLO) {
+      perdidas += (anilloEscribe - anilloLee) - N_ANILLO;
+      anilloLee = anilloEscribe - N_ANILLO;
+    }
+    vTaskDelayUntil(&ultimo, periodo);
+  }
+}
+
+// ----------------------------------------------------------------- ENVIO --
+// Paquete: 0 tipo 0xD3 | 1-4 numero de la primera muestra | 5 cuantas | 6.. mV (2 bytes cada una)
+// El numero de muestra da el tiempo exacto de cada valor y deja ver si se perdio alguna.
+
+void enviarMuestras() {
+  if (!chMuestras || !bleConectado) { anilloLee = anilloEscribe; return; }
+
+  int caben = ((int)mtuActual - 3 - 6) / 2;
+  if (caben < 1)   caben = 1;
+  if (caben > 120) caben = 120;
+
+  uint8_t b[6 + 240];
+  for (uint8_t p = 0; p < MAX_NOTIFY; p++) {
+    const uint32_t pendientes = anilloEscribe - anilloLee;
+    if (pendientes == 0) break;
+    const uint16_t n = (pendientes > (uint32_t)caben) ? (uint16_t)caben : (uint16_t)pendientes;
+    const uint32_t idx = anilloLee;
+
+    b[0] = 0xD3;
+    b[1] = idx & 0xFF;
+    b[2] = (idx >> 8) & 0xFF;
+    b[3] = (idx >> 16) & 0xFF;
+    b[4] = (idx >> 24) & 0xFF;
+    b[5] = (uint8_t)n;
+    for (uint16_t k = 0; k < n; k++) {
+      const uint16_t v = anillo[(idx + k) % N_ANILLO];
+      b[6 + 2 * k] = v & 0xFF;
+      b[7 + 2 * k] = v >> 8;
+    }
+    chMuestras->setValue(b, 6 + 2 * n);
+    chMuestras->notify();
+    anilloLee = idx + n;
+  }
+}
+
+// ------------------------------------------------------------ CALLBACKS --
+
+class Callbacks : public NimBLEServerCallbacks {
+  void onConnect(NimBLEServer *s, NimBLEConnInfo &info) override {
+    bleConectado = true;
+    mtuActual = 23;
+    anilloLee = anilloEscribe;        // el flujo empieza desde esta muestra
+    perdidas = 0;
+    digitalWrite(PIN_LED, HIGH);
+    Serial.println("Pagina conectada");
+  }
+  void onDisconnect(NimBLEServer *s, NimBLEConnInfo &info, int reason) override {
+    bleConectado = false;
+    digitalWrite(PIN_LED, LOW);
+    Serial.printf("Pagina desconectada (motivo %d)\n", reason);
+    NimBLEDevice::startAdvertising();
+  }
+  void onMTUChange(uint16_t MTU, NimBLEConnInfo &info) override {
+    mtuActual = MTU;
+    Serial.printf("MTU %u: caben %d muestras por paquete\n", MTU, ((int)MTU - 9) / 2);
+  }
+};
+
+// -------------------------------------------------------------- PROGRAMA --
+
+void setup() {
+  Serial.begin(115200);
+  delay(400);
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
+
+  analogReadResolution(12);                       // 0 a 4095
+  analogSetPinAttenuation(PIN_EMG, ADC_11db);     // entrada hasta unos 3.1 V
+
+  NimBLEDevice::init(NOMBRE_BLE);
+  NimBLEDevice::setMTU(247);                      // paquetes grandes: necesarios para 1000 Hz
+
+  NimBLEServer *servidor = NimBLEDevice::createServer();
+  servidor->setCallbacks(new Callbacks());
+
+  NimBLEService *servicio = servidor->createService(UUID_SERVICIO);
+  chMuestras = servicio->createCharacteristic(UUID_MUESTRAS, NIMBLE_PROPERTY::NOTIFY);
+  servicio->start();
+
+  NimBLEAdvertisementData anuncio;
+  anuncio.setFlags(BLE_HS_ADV_F_DISC_GEN | BLE_HS_ADV_F_BREDR_UNSUP);
+  anuncio.addServiceUUID(UUID_SERVICIO);
+  NimBLEAdvertisementData respuesta;
+  respuesta.setName(NOMBRE_BLE);
+  NimBLEAdvertising *adv = NimBLEDevice::getAdvertising();
+  adv->setAdvertisementData(anuncio);
+  adv->setScanResponseData(respuesta);
+  adv->start();
+
+  xTaskCreatePinnedToCore(tareaMuestreo, "muestreo", 3072, nullptr, 10, nullptr, 0);
+
+  Serial.printf("Listo. Busca \"%s\" desde la pagina. Pin %u, %lu muestras por segundo.\n",
+                NOMBRE_BLE, PIN_EMG, (unsigned long)FS_HZ);
+}
+
+void loop() {
+  static unsigned long ultimoEnvio = 0;
+  if (millis() - ultimoEnvio >= T_ENVIO_MS) {
+    ultimoEnvio = millis();
+    enviarMuestras();
+  }
+
+  // Reporte cada 2 segundos, para ver si de verdad va a 1000 Hz
+  static unsigned long ultimoReporte = 0;
+  static uint32_t conteoPrevio = 0;
+  if (millis() - ultimoReporte >= 2000) {
+    const uint32_t ahora = anilloEscribe;
+    const float hz = (ahora - conteoPrevio) / ((millis() - ultimoReporte) / 1000.0);
+    ultimoReporte = millis();
+    conteoPrevio = ahora;
+    Serial.printf("Muestreo real: %.1f Hz | enviadas %lu | perdidas %lu | conectada %d\n",
+                  hz, (unsigned long)anilloLee, (unsigned long)perdidas, (int)bleConectado);
+  }
+
+  delay(2);
+}
