@@ -28,7 +28,9 @@ Sessions 1 to 7 train the model. Sessions 8 to 10 test it. No session is in both
 
 ## Team
 
-- Mariana Canizalez Rodriguez. Member code: A00842708. GitHub user: MarianaCanizalez. Role: PENDING. AI tool: Claude in VSCode
-- Rasmus Leonardo Herrada Santos. Member code: PENDING. GitHub user: PENDING. Role: PENDING. AI tool: PENDING.
-- Juan Fernando Núñez Oseguera. Member code: PENDING. GitHub user: PENDING. Role: PENDING. AI tool: PENDING.
-- Jorge Enríquez Córdova. Member code: PENDING. GitHub user: PENDING. Role: PENDING. AI tool: PENDING.
+| Member code | Name | GitHub user | Role | AI tool |
+|---|---|---|---|---|
+| A00842708 | Mariana Canizalez Rodriguez | MarianaCanizalez | PENDING | Claude in VSCode |
+| PENDING | Rasmus Leonardo Herrada Santos | PENDING | PENDING | PENDING |
+| PENDING | Juan Fernando Núñez Oseguera | PENDING | PENDING | PENDING |
+| PENDING | Jorge Enríquez Córdova | PENDING | PENDING | PENDING |
