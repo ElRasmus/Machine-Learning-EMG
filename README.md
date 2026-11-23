@@ -1,22 +1,34 @@
 # Machine-Learning-EMG
-Machine learning module project, Data and code files will be stored here.
 
-# 1- Data Aquisition:
-Number of recordings, sessions, persons.  ----------------------- Faltante
+Machine learning module project. Data and code files are stored here.
 
-3 electrodes were placed in the forearm of the patient. Two in the anterior, internal proximal abdomen of the forearm, above the flexor digitorum superficialis muscle. And one reference electrove in the elbow, above the olecranon. New electrodes were used for each session.
+## 1. Data acquisition
 
-# 2- Task:
-Close the dominant hand and hold for 2 seconds. There will be 2 types of recordings: Contraction and rest.
+10 recordings, 250 trials, 10 sessions, 1 person. Disposable Ag surface electrodes. Three electrodes are placed on the forearm: two over the flexor digitorum superficialis muscle and one reference electrode at the elbow, over the olecranon. New electrodes were used for each session. The electrode distance was (PENDING). The signal is not the raw EMG: it is the smoothed analog envelope of the sensor, read by the ESP32. Sampling frequency: PENDING Hz.
 
-# 3- Trial and cue timing:
-Cue video played during each session for the patient. First the patient contracts for 2 seconds and then they rest for 4 seconds. After 5 repetitions, a set is completed. A session includes 5 sets with 5 minutes of rest in between each set.
+## 2. Task
 
-# 4- Sessions
-------------- Faltante
+Close the dominant hand and hold for 2 seconds. Two classes: contraction and rest.
 
-# 5- Cleaning
-The device has several analog stages to reduce the noise from the signal: Bandpass filter with cutoff frequencies from 20 to 397 Hz, notch filter that reduces 60Hz by 40 dB and a full-wave rectifier to obtain only positive values necessary for the ESP32 to read the values.
+## 3. Trial and cue timing
 
-# 6- Fair split
-Sesiones de entrenamiento separadas de las de validación (definir cuales sesiones fueron para qué) ----------- Faltante
+A cue video is played during each session. First the person contracts for 2 seconds and then rests for 4 seconds. After 5 repetitions, a set is completed. A session includes 5 sets with 5 minutes of rest between each set.
+
+## 4. Sessions
+
+10 sessions on 2 days. New electrodes in every session. Dates:PENDING.
+
+## 5. Cleaning
+
+The device has several analog stages that reduce noise: a band-pass filter from 20 to 397 Hz, a notch filter that reduces 60 Hz by more than 40 dB, and a full-wave rectifier with a linear envelope. Details and sources are in PROTOCOL.md. A recording is rejected if any sample reaches the limit of the converter, if samples are missing or the length does not match the expected duration, or if the signal is flat at a constant value, for example because an electrode is disconnected. Results are in QUALITY-REPORT.md. Recordings rejected: PENDING of 10.
+
+## 6. Fair split
+
+Sessions 1 to 7 train the model. Sessions 8 to 10 test it. No session is in both. The test sessions are opened once, at the end.
+
+## Team
+
+- Mariana Canizalez Rodriguez. Member code: A00842708. GitHub user: MarianaCanizalez. Role: PENDING. AI tool: Claude in VSCode
+- Rasmus Leonardo Herrada Santos. Member code: PENDING. GitHub user: PENDING. Role: PENDING. AI tool: PENDING.
+- Juan Fernando Núñez Oseguera. Member code: PENDING. GitHub user: PENDING. Role: PENDING. AI tool: PENDING.
+- Jorge Enríquez Córdova. Member code: PENDING. GitHub user: PENDING. Role: PENDING. AI tool: PENDING.
