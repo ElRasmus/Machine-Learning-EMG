@@ -1,0 +1,297 @@
+// ===========================================================================
+//  Lectura de EMG a 1000 muestras por segundo en el pin 34 del ESP32
+//  y envio automatico a Google Sheets, un ensayo por hoja nueva.
+//
+//  Cada ensayo graba: reposo -> contraccion -> reposo, y etiqueta cada
+//  muestra como "rest" o "move" segun la fase en la que se tomo.
+//
+//  El LED de la placa es la senal para la persona:
+//      LED apagado  = reposo
+//      LED encendido = contraer
+//
+//  Para empezar un ensayo: oprime el boton BOOT de la placa,
+//  o escribe la letra s en el monitor serial.
+//
+//  NO SUBAS ESTE ARCHIVO A GITHUB CON TU CONTRASENA DE WIFI ESCRITA.
+// ===========================================================================
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <HTTPClient.h>
+#include <time.h>
+
+// --------------------------------------------------------------- AJUSTES --
+
+const char *WIFI_SSID  = "CAMBIA_ESTO";
+const char *WIFI_PASS  = "CAMBIA_ESTO";
+
+// URL que te da Google al publicar el Apps Script (termina en /exec)
+const char *URL_SCRIPT = "https://script.google.com/macros/s/CAMBIA_ESTO/exec";
+
+constexpr uint8_t PIN_EMG   = 34;   // entrada analogica: envolvente del circuito
+constexpr uint8_t PIN_BOTON = 0;    // boton BOOT de la placa
+constexpr uint8_t PIN_LED   = 2;    // LED de la placa (en algunas placas es otro pin)
+
+constexpr uint32_t FS_HZ      = 1000;                  // muestras por segundo
+constexpr uint32_t PERIODO_US = 1000000UL / FS_HZ;     // microsegundos entre muestras
+
+// Duracion de cada fase del ensayo, en segundos
+constexpr float T_REPOSO_1 = 4.0;
+constexpr float T_MOVER    = 2.0;
+constexpr float T_REPOSO_2 = 4.0;
+
+// Muestras que se mandan en cada envio. Si la placa se reinicia por falta de
+// memoria, bajalo a 500. Si todo funciona y quieres que suba mas rapido,
+// puedes probar 2000.
+constexpr uint32_t N_TROZO = 1000;
+
+// Pon true si ademas quieres ver el CSV completo en el monitor serial
+constexpr bool IMPRIMIR_CSV = false;
+
+// Zona horaria del centro de Mexico (UTC-6, sin horario de verano)
+constexpr long  ZONA_HORARIA_S = -6 * 3600;
+
+// ---------------------------------------------------------------- CALCULOS
+
+constexpr uint32_t N_REPOSO_1 = (uint32_t)(T_REPOSO_1 * FS_HZ);
+constexpr uint32_t N_MOVER    = (uint32_t)(T_MOVER * FS_HZ);
+constexpr uint32_t N_REPOSO_2 = (uint32_t)(T_REPOSO_2 * FS_HZ);
+constexpr uint32_t N_TOTAL    = N_REPOSO_1 + N_MOVER + N_REPOSO_2;
+
+uint16_t muestras[N_TOTAL];          // milivolts de cada muestra
+uint32_t ensayo       = 0;           // numero de ensayo desde que se encendio
+uint32_t jitterMaxUs  = 0;           // el mayor atraso de una muestra, en us
+uint32_t duracionUs   = 0;           // cuanto duro de verdad la adquisicion
+
+// Devuelve true si la muestra i cae en la fase de contraccion
+inline bool esContraccion(uint32_t i) {
+  return (i >= N_REPOSO_1) && (i < N_REPOSO_1 + N_MOVER);
+}
+
+// ------------------------------------------------------------------ WIFI --
+
+void conectarWiFi() {
+  if (WiFi.status() == WL_CONNECTED) return;
+  Serial.print("Conectando a WiFi");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) {
+    delay(400);
+    Serial.print('.');
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("WiFi listo, IP: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("No se pudo conectar al WiFi. Los datos se quedan en la placa.");
+  }
+}
+
+// ----------------------------------------------------------- ADQUISICION --
+
+// Toma N_TOTAL muestras, una cada PERIODO_US microsegundos.
+// Dentro de este ciclo no se hace nada mas, para no mover el ritmo.
+void adquirir() {
+  jitterMaxUs = 0;
+  const unsigned long t0 = micros();
+
+  for (uint32_t i = 0; i < N_TOTAL; i++) {
+    const unsigned long objetivo = t0 + i * PERIODO_US;
+    while ((long)(micros() - objetivo) < 0) {
+      // espera activa hasta el instante exacto de esta muestra
+    }
+    const unsigned long atraso = micros() - objetivo;
+    if (atraso > jitterMaxUs) jitterMaxUs = atraso;
+
+    muestras[i] = (uint16_t)analogReadMilliVolts(PIN_EMG);
+
+    digitalWrite(PIN_LED, esContraccion(i) ? HIGH : LOW);
+  }
+
+  duracionUs = micros() - t0;
+  digitalWrite(PIN_LED, LOW);
+}
+
+// ----------------------------------------------------------------- ENVIO --
+
+// Nombre de la hoja: numero de ensayo y fecha y hora del reloj de internet
+String nombreHoja() {
+  char nombre[48];
+  struct tm t;
+  if (getLocalTime(&t, 1000)) {
+    snprintf(nombre, sizeof(nombre), "e%03lu_%04d%02d%02d_%02d%02d%02d",
+             (unsigned long)ensayo, t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+             t.tm_hour, t.tm_min, t.tm_sec);
+  } else {
+    snprintf(nombre, sizeof(nombre), "e%03lu_sin_hora_%lu",
+             (unsigned long)ensayo, (unsigned long)millis());
+  }
+  return String(nombre);
+}
+
+// Manda un grupo de muestras. fila = renglon de la hoja donde empieza este grupo.
+bool enviarTrozo(const String &hoja, uint32_t desde, uint32_t cuantas,
+                 uint32_t fila, bool primero) {
+  String cuerpo;
+  cuerpo.reserve(cuantas * 32 + 64);
+
+  char linea[56];
+  for (uint32_t i = desde; i < desde + cuantas; i++) {
+    snprintf(linea, sizeof(linea), "%lu,%.1f,%u,%.4f,%s\n",
+             (unsigned long)i,
+             i * 1000.0 / FS_HZ,
+             (unsigned)muestras[i],
+             muestras[i] / 1000.0,
+             esContraccion(i) ? "move" : "rest");
+    cuerpo += linea;
+  }
+
+  String url = String(URL_SCRIPT) + "?hoja=" + hoja +
+               "&fila=" + String(fila) +
+               "&primero=" + (primero ? "1" : "0") +
+               "&fs=" + String(FS_HZ);
+
+  for (int intento = 1; intento <= 3; intento++) {
+    WiFiClientSecure cliente;
+    cliente.setInsecure();   // no revisa el certificado de Google: simplifica el codigo
+
+    HTTPClient http;
+    http.setTimeout(25000);
+    if (!http.begin(cliente, url)) {
+      delay(800);
+      continue;
+    }
+    http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    http.addHeader("Content-Type", "text/plain");
+
+    int codigo = http.POST(cuerpo);
+    String respuesta = (codigo > 0) ? http.getString() : String("");
+    http.end();
+
+    if (codigo == HTTP_CODE_OK && respuesta.startsWith("OK")) return true;
+
+    Serial.printf("   intento %d fallo (codigo %d): %s\n",
+                  intento, codigo, respuesta.c_str());
+    delay(1200);
+  }
+  return false;
+}
+
+// Manda el ensayo completo, trozo por trozo
+bool enviarEnsayo() {
+  conectarWiFi();
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  const String hoja = nombreHoja();
+  Serial.printf("Enviando a la hoja %s\n", hoja.c_str());
+
+  uint32_t enviadas = 0;
+  bool primero = true;
+  while (enviadas < N_TOTAL) {
+    const uint32_t cuantas = min(N_TROZO, N_TOTAL - enviadas);
+    const uint32_t fila = 2 + enviadas;          // el renglon 1 son los titulos
+
+    if (!enviarTrozo(hoja, enviadas, cuantas, fila, primero)) {
+      Serial.printf("No se pudo enviar desde la muestra %lu. Se detiene el envio.\n",
+                    (unsigned long)enviadas);
+      return false;
+    }
+    enviadas += cuantas;
+    primero = false;
+    Serial.printf("   %lu de %lu muestras\n",
+                  (unsigned long)enviadas, (unsigned long)N_TOTAL);
+  }
+  return true;
+}
+
+// -------------------------------------------------------------- UN ENSAYO --
+
+void correrEnsayo() {
+  ensayo++;
+  Serial.printf("\n=== Ensayo %lu ===\n", (unsigned long)ensayo);
+  Serial.printf("Reposo %.1f s (LED apagado), contrae %.1f s (LED encendido), reposo %.1f s\n",
+                T_REPOSO_1, T_MOVER, T_REPOSO_2);
+
+  for (int k = 3; k > 0; k--) {
+    Serial.printf("%d...\n", k);
+    digitalWrite(PIN_LED, HIGH); delay(80);
+    digitalWrite(PIN_LED, LOW);  delay(920);
+  }
+  Serial.println("Grabando");
+
+  adquirir();
+
+  const float fsReal = (duracionUs > 0) ? (N_TOTAL * 1000000.0 / duracionUs) : 0;
+  Serial.printf("Listo. %lu muestras en %.3f s. Frecuencia real: %.1f Hz. Atraso mayor: %lu us\n",
+                (unsigned long)N_TOTAL, duracionUs / 1000000.0, fsReal,
+                (unsigned long)jitterMaxUs);
+
+  if (IMPRIMIR_CSV) {
+    Serial.println("n,t_ms,mv,volts,label");
+    for (uint32_t i = 0; i < N_TOTAL; i++) {
+      Serial.printf("%lu,%.1f,%u,%.4f,%s\n", (unsigned long)i, i * 1000.0 / FS_HZ,
+                    (unsigned)muestras[i], muestras[i] / 1000.0,
+                    esContraccion(i) ? "move" : "rest");
+    }
+  }
+
+  if (enviarEnsayo()) Serial.println("Ensayo guardado en Google Sheets.");
+  else                Serial.println("El ensayo NO se guardo. Revisa el WiFi y la URL del script.");
+
+  Serial.println("Oprime el boton BOOT o escribe s para el siguiente ensayo.");
+}
+
+// ------------------------------------------------------------------ SETUP --
+
+void setup() {
+  Serial.begin(115200);
+  delay(400);
+  Serial.println("\nEMG 1000 muestras por segundo, pin 34");
+
+  pinMode(PIN_BOTON, INPUT_PULLUP);
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
+
+  analogReadResolution(12);                          // 0 a 4095
+  analogSetPinAttenuation(PIN_EMG, ADC_11db);        // rango de entrada hasta unos 3.1 V
+
+  conectarWiFi();
+  configTime(ZONA_HORARIA_S, 0, "pool.ntp.org", "time.nist.gov");
+
+  struct tm t;
+  if (getLocalTime(&t, 5000)) {
+    Serial.printf("Hora: %04d-%02d-%02d %02d:%02d:%02d\n",
+                  t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+                  t.tm_hour, t.tm_min, t.tm_sec);
+  } else {
+    Serial.println("Sin hora de internet: las hojas se van a llamar sin_hora.");
+  }
+
+  Serial.printf("Cada ensayo son %lu muestras (%.1f s).\n",
+                (unsigned long)N_TOTAL, (T_REPOSO_1 + T_MOVER + T_REPOSO_2));
+  Serial.println("Oprime el boton BOOT o escribe s para empezar.");
+}
+
+// ------------------------------------------------------------------- LOOP --
+
+void loop() {
+  bool arrancar = false;
+
+  if (digitalRead(PIN_BOTON) == LOW) {
+    delay(40);
+    if (digitalRead(PIN_BOTON) == LOW) {
+      while (digitalRead(PIN_BOTON) == LOW) delay(10);   // espera a que la suelten
+      arrancar = true;
+    }
+  }
+
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == 's' || c == 'S') arrancar = true;
+  }
+
+  if (arrancar) correrEnsayo();
+  delay(20);
+}
