@@ -36,9 +36,9 @@ constexpr uint32_t FS_HZ      = 1000;                  // muestras por segundo
 constexpr uint32_t PERIODO_US = 1000000UL / FS_HZ;     // microsegundos entre muestras
 
 // Duracion de cada fase del ensayo, en segundos
-constexpr float T_REPOSO_1 = 4.0;
-constexpr float T_MOVER    = 2.0;
-constexpr float T_REPOSO_2 = 4.0;
+constexpr float T_REPOSO_1 = 1.0;
+constexpr float T_MOVER    = 1.0;
+constexpr float T_REPOSO_2 = 1.0;
 
 // Muestras que se mandan en cada envio. Si la placa se reinicia por falta de
 // memoria, bajalo a 500. Si todo funciona y quieres que suba mas rapido,
@@ -241,6 +241,7 @@ void correrEnsayo() {
   else                Serial.println("El ensayo NO se guardo. Revisa el WiFi y la URL del script.");
 
   Serial.println("Oprime el boton BOOT o escribe s para el siguiente ensayo.");
+  Serial.println("Vuelve la vista en vivo:");
 }
 
 // ------------------------------------------------------------------ SETUP --
@@ -271,10 +272,13 @@ void setup() {
 
   Serial.printf("Cada ensayo son %lu muestras (%.1f s).\n",
                 (unsigned long)N_TOTAL, (T_REPOSO_1 + T_MOVER + T_REPOSO_2));
-  Serial.println("Oprime el boton BOOT o escribe s para empezar.");
+  Serial.println("s = grabar un ensayo   v = prender o apagar la vista en vivo");
+  Serial.println("Empieza la vista en vivo del pin 34 en milivolts:");
 }
 
 // ------------------------------------------------------------------- LOOP --
+
+bool vistaEnVivo = true;     // al encender, muestra la senal para el Serial Plotter
 
 void loop() {
   bool arrancar = false;
@@ -290,8 +294,22 @@ void loop() {
   while (Serial.available()) {
     char c = Serial.read();
     if (c == 's' || c == 'S') arrancar = true;
+    if (c == 'v' || c == 'V') {
+      vistaEnVivo = !vistaEnVivo;
+      Serial.println(vistaEnVivo ? "\nVista en vivo encendida" : "\nVista en vivo apagada");
+    }
   }
 
-  if (arrancar) correrEnsayo();
-  delay(20);
+  if (arrancar) {
+    correrEnsayo();
+    return;
+  }
+
+  // Vista en vivo: un valor cada 20 ms. Abre Herramientas > Serial Plotter
+  // para ver la senal y comprobar que los electrodos estan bien puestos.
+  static unsigned long ultimaVista = 0;
+  if (vistaEnVivo && millis() - ultimaVista >= 20) {
+    ultimaVista = millis();
+    Serial.println(analogReadMilliVolts(PIN_EMG));
+  }
 }
