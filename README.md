@@ -4,7 +4,7 @@ Machine learning module project. Data and code files are stored here.
 
 ## 1. Data acquisition
 
-10 recordings, 250 trials, 10 sessions, 1 person. Disposable Ag surface electrodes. Three electrodes are placed on the forearm: two over the flexor digitorum superficialis muscle and one reference electrode at the elbow, over the olecranon. New electrodes were used for each session. The electrode distance was (PENDING). The signal is not the raw EMG: it is the smoothed analog envelope of the sensor, read by the ESP32. Sampling frequency: PENDING Hz.
+10 contractions, 3 sets per session, 3 sessions, 1 person. Disposable Ag surface electrodes. Three electrodes are placed on the forearm: two over the flexor digitorum superficialis muscle and one reference electrode at the elbow, over the olecranon. New electrodes were used for each session. The electrode distance was 2 centimeters. The signal is not the raw EMG: it is the smoothed analog envelope of the signal that the electrodes pick up, read by the ESP32 on the analog output. Sampling frequency: 1000 Hz.
 
 ## 2. Task
 
@@ -12,11 +12,11 @@ Close the dominant hand and hold for 2 seconds. Two classes: contraction and res
 
 ## 3. Trial and cue timing
 
-A cue video is played during each session. First the person contracts for 2 seconds and then rests for 4 seconds. After 5 repetitions, a set is completed. A session includes 5 sets with 5 minutes of rest between each set.
+A cue timer is played during each session. First the person contracts for 2 seconds and then rests for 1 seconds. After 10 repetitions, a set is completed. A session includes 3 sets with 2 hours minutes of rest between each set.
 
 ## 4. Sessions
 
-10 sessions on 2 days. New electrodes in every session. Dates:PENDING.
+3 sessions on 1 day. New electrodes in every session. Date: 11/23/2026.
 
 ## 5. Cleaning
 
@@ -24,7 +24,7 @@ The device has several analog stages that reduce noise: a band-pass filter from 
 
 ## 6. Fair split
 
-Sessions 1 to 7 train the model. Sessions 8 to 10 test it. No session is in both. The test sessions are opened once, at the end.
+Sessions 1 to 3 train the model. Then a 4th session to test it. No session is in both. The test sessions are opened once, at the end.
 
 ## Team
 
@@ -32,5 +32,5 @@ Sessions 1 to 7 train the model. Sessions 8 to 10 test it. No session is in both
 |---|---|---|---|---|
 | A00842708 | Mariana Canizalez Rodriguez | MarianaCanizalez | PENDING | Claude in VSCode |
 | PENDING | Rasmus Leonardo Herrada Santos | PENDING | PENDING | PENDING |
-| PENDING | Juan Fernando Núñez Oseguera | PENDING | PENDING | PENDING |
+| A00841431 | Juan Fernando Núñez Oseguera | JuanNunez731 | TEST SUBJECT | PENDING |
 | PENDING | Jorge Enríquez Córdova | PENDING | PENDING | PENDING |
