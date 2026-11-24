@@ -33,4 +33,4 @@ Sessions 1 to 3 train the model. Then a 4th session to test it. No session is in
 | A00842708 | Mariana Canizalez Rodriguez | MarianaCanizalez | PENDING | Claude in VSCode |
 | PENDING | Rasmus Leonardo Herrada Santos | PENDING | PENDING | PENDING |
 | A00841431 | Juan Fernando Núñez Oseguera | JuanNunez731 | TEST SUBJECT | PENDING |
-| PENDING | Jorge Enríquez Córdova | jenriqzcorr | Training First Model | ChatGPT, Collab |
+| A00842879 | Jorge Enríquez Córdova | jenriqzcorr | Training First Model | ChatGPT, Collab |
