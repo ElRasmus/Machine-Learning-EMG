@@ -30,7 +30,7 @@ Sessions 1 to 3 train the model. Then a 4th session to test it. No session is in
 
 | Member code | Name | GitHub user | Role | AI tool |
 |---|---|---|---|---|
-| A00842708 | Mariana Canizalez Rodriguez | MarianaCanizalez | Data adquisition website and code | Claude in VSCode |
+| A00842708 | Mariana Canizalez Rodriguez | MarianaCanizalez | Data adquisition website and code in ESP32 | Claude in VSCode |
 | PENDING | Rasmus Leonardo Herrada Santos | PENDING | PENDING | PENDING |
 | A00841431 | Juan Fernando Núñez Oseguera | JuanNunez731 | TEST SUBJECT | PENDING |
 | A00842879 | Jorge Enríquez Córdova | jenriqzcorr | Training First Model | ChatGPT, Collab |
